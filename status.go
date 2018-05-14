@@ -32,3 +32,11 @@ type Report struct {
 	Status   string
 	Error    string
 }
+
+// err return the string error that will be in the health report
+func err(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}

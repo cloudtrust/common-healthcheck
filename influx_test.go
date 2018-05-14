@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"math/rand"
+	"strconv"
  
 	. "github.com/cloudtrust/common-healthcheck"
 	mock "github.com/cloudtrust/common-healthcheck/mock"
@@ -62,4 +64,45 @@ func TestNoopInfluxHealthChecks(t *testing.T) {
 	assert.Zero(t, report.Duration)
 	assert.Equal(t, Deactivated, report.Status)
 	assert.Zero(t, report.Error)
+}
+
+func TestInfluxModuleLoggingMW(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockInflux = mock.NewInflux(mockCtrl)
+
+	var module = NewInfluxModule(mockInflux, true)
+	var mockLogger = mock.NewLogger(mockCtrl)
+
+	var m = MakeInfluxModuleLoggingMW(mockLogger)(module)
+
+	// Context with correlation ID.
+	rand.Seed(time.Now().UnixNano())
+	var corrID = strconv.FormatUint(rand.Uint64(), 10)
+	var ctx = context.WithValue(context.Background(), "correlation_id", corrID)
+
+	mockInflux.EXPECT().Ping(gomock.Any()).Times(1)
+	mockLogger.EXPECT().Log("unit", "HealthChecks", "correlation_id", corrID, "took", gomock.Any()).Return(nil).Times(1)
+	m.HealthChecks(ctx)
+
+	// Without correlation ID.
+	mockInflux.EXPECT().Ping(gomock.Any()).Times(1)
+	var f = func() {
+		m.HealthChecks(context.Background())
+	}
+	assert.Panics(t, f)
+}
+
+func TestInfluxReportMarshalJSON(t *testing.T){
+	var report = &InfluxReport{
+		Name: "Influx",
+		Duration: 1 * time.Second,
+		Status: OK,
+		Error: fmt.Errorf("Error"),
+	}
+
+	json, err := report.MarshalJSON()
+
+	assert.Nil(t, err)
+	assert.Equal(t, "{\"name\":\"Influx\",\"duration\":\"1s\",\"status\":\"OK\",\"error\":\"Error\"}", string(json))
 }

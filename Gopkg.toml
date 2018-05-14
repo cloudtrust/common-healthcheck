@@ -26,10 +26,6 @@
 
 
 [[constraint]]
-  name = "github.com/cloudtrust/flaki-service"
-  version = "1.1.0"
-
-[[constraint]]
   name = "github.com/go-kit/kit"
   version = "0.7.0"
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"encoding/json"
 
 	"github.com/pkg/errors"
 	"github.com/go-kit/kit/log"
@@ -23,6 +24,8 @@ type SentryModule struct {
 type SentryClient interface {
 	URL() string
 }
+
+
 
 // sentryHTTPClient is the interface of the http client.
 type sentryHTTPClient interface {
@@ -44,6 +47,21 @@ type SentryReport struct {
 	Duration time.Duration
 	Status   Status
 	Error    error
+}
+
+
+func (i *SentryReport) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Name     string `json:"name"`
+		Duration string `json:"duration"`
+		Status   string `json:"status"`
+		Error    string `json:"error"`
+	}{
+		Name: i.Name,
+		Duration: i.Duration.String(),
+		Status: i.Status.String(),
+		Error: err(i.Error),
+	})
 }
 
 // HealthChecks executes all health checks for Sentry.

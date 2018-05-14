@@ -1,20 +1,19 @@
 package common
 
-
-
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
-) 
+)
 
 // InfluxModule is the health check module for influx.
 type InfluxModule struct {
 	influx  Influx
 	enabled bool
-} 
+}
 
 // influx is the interface of the influx client.
 type Influx interface {
@@ -28,7 +27,6 @@ func NewInfluxModule(influx Influx, enabled bool) *InfluxModule {
 		enabled: enabled,
 	}
 }
-
 
 func (m *InfluxModule) influxPing() InfluxReport {
 	var healthCheckName = "ping"
@@ -70,6 +68,20 @@ type InfluxReport struct {
 	Error    error
 }
 
+func (i *InfluxReport) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Name     string `json:"name"`
+		Duration string `json:"duration"`
+		Status   string `json:"status"`
+		Error    string `json:"error"`
+	}{
+		Name: i.Name,
+		Duration: i.Duration.String(),
+		Status: i.Status.String(),
+		Error: err(i.Error),
+	})
+}
+
 // HealthChecks executes all health checks for influx.
 func (m *InfluxModule) HealthChecks(context.Context) []InfluxReport {
 	var reports = []InfluxReport{}
@@ -81,7 +93,6 @@ func (m *InfluxModule) HealthChecks(context.Context) []InfluxReport {
 type InfluxHealthChecker interface {
 	HealthChecks(context.Context) []InfluxReport
 }
-
 
 // influxModuleLoggingMW implements Module.
 func (m *influxModuleLoggingMW) HealthChecks(ctx context.Context) []InfluxReport {
@@ -107,4 +118,3 @@ func MakeInfluxModuleLoggingMW(logger log.Logger) func(InfluxHealthChecker) Infl
 		}
 	}
 }
-

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"time"
+	"encoding/json"
 
 	"github.com/coreos/go-systemd/dbus"
 	"github.com/go-kit/kit/log"
@@ -48,6 +49,21 @@ type JaegerReport struct {
 	Duration time.Duration
 	Status   Status
 	Error    error
+}
+
+
+func (i *JaegerReport) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Name     string `json:"name"`
+		Duration string `json:"duration"`
+		Status   string `json:"status"`
+		Error    string `json:"error"`
+	}{
+		Name: i.Name,
+		Duration: i.Duration.String(),
+		Status: i.Status.String(),
+		Error: err(i.Error),
+	})
 }
 
 // HealthChecks executes all health checks for Jaeger.
@@ -95,6 +111,7 @@ func (m *JaegerModule) jaegerSystemDCheck() JaegerReport {
 		Error:    hcErr,
 	}
 }
+
 
 func (m *JaegerModule) jaegerCollectorPing() JaegerReport {
 	var healthCheckName = "ping jaeger collector"
