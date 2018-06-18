@@ -32,7 +32,7 @@ func TestSentryHealthChecks(t *testing.T) {
 
 	var m = NewSentryModule(mockSentry, s.Client(), true)
 
-	mockSentry.EXPECT().URL().Return("http://a:b@sentry.io/api/1/store/").Times(1)
+	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", s.URL[7:])).Times(1)
 	var report = m.HealthChecks(context.Background())[0]
 	assert.Equal(t, "ping", report.Name)
 	assert.NotZero(t, report.Duration)
