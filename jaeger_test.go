@@ -1,6 +1,6 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/jaeger.go -package=mock -mock_names=SystemDConn=SystemDConn  github.com/cloudtrust/common-healthcheck SystemDConn
+//go:generate mockgen -destination=./mock/jaeger.go -package=mock -mock_names=SystemDConn=SystemDConn github.com/cloudtrust/common-healthcheck SystemDConn
 
 import (
 	"context"
@@ -67,7 +67,7 @@ func TestNoopJaegerHealthChecks(t *testing.T) {
 	var m = NewJaegerModule(mockSystemDConn, s.Client(), "jaeger-collector:14269", false)
 
 	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "jaeger agent systemd unit check", report.Name)
+	assert.Equal(t, "jaeger", report.Name)
 	assert.Zero(t, report.Duration)
 	assert.Equal(t, Deactivated, report.Status)
 	assert.Zero(t, report.Error)

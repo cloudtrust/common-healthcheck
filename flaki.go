@@ -9,6 +9,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+// NewFlakiModule returns the Flaki health module.
+func NewFlakiModule(client FlakiClient) *FlakiModule {
+	return &FlakiModule{
+		flakiClient: client,
+	}
+}
+
 // FlakiModule is the health check module for Flaki.
 type FlakiModule struct {
 	flakiClient FlakiClient
@@ -19,13 +26,6 @@ type FlakiClient interface {
 	NextValidID() (string, error)
 }
 
-// NewFlakiModule returns the Flaki health module.
-func NewFlakiModule(client FlakiClient) *FlakiModule {
-	return &FlakiModule{
-		flakiClient: client,
-	}
-}
-
 // FlakiReport is the health report returned by the flaki module.
 type FlakiReport struct {
 	Name     string
@@ -34,17 +34,18 @@ type FlakiReport struct {
 	Error    error
 }
 
-func (i *FlakiReport) MarshalJSON() ([]byte, error) {
+// MarshalJSON marshal the flaki report.
+func (r *FlakiReport) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Name     string `json:"name"`
 		Duration string `json:"duration"`
 		Status   string `json:"status"`
 		Error    string `json:"error"`
 	}{
-		Name:     i.Name,
-		Duration: i.Duration.String(),
-		Status:   i.Status.String(),
-		Error:    err(i.Error),
+		Name:     r.Name,
+		Duration: r.Duration.String(),
+		Status:   r.Status.String(),
+		Error:    err(r.Error),
 	})
 }
 
@@ -81,6 +82,16 @@ func (m *FlakiModule) flakiNextIDCheck() FlakiReport {
 	}
 }
 
+// MakeFlakiModuleLoggingMW makes a logging middleware at module level.
+func MakeFlakiModuleLoggingMW(logger log.Logger) func(FlakiHealthChecker) FlakiHealthChecker {
+	return func(next FlakiHealthChecker) FlakiHealthChecker {
+		return &flakiModuleLoggingMW{
+			logger: logger,
+			next:   next,
+		}
+	}
+}
+
 // FlakiHealthChecker is the interface of the flaki health check module.
 type FlakiHealthChecker interface {
 	HealthChecks(context.Context) []FlakiReport
@@ -92,17 +103,7 @@ type flakiModuleLoggingMW struct {
 	next   FlakiHealthChecker
 }
 
-// MakeFlakiModuleLoggingMW makes a logging middleware at module level.
-func MakeFlakiModuleLoggingMW(logger log.Logger) func(FlakiHealthChecker) FlakiHealthChecker {
-	return func(next FlakiHealthChecker) FlakiHealthChecker {
-		return &flakiModuleLoggingMW{
-			logger: logger,
-			next:   next,
-		}
-	}
-}
-
-// flakiModuleLoggingMW implements Module.
+// flakiModuleLoggingMW implements FlakiHealthChecker. There must be a key "correlation_id" with a string value in the context.
 func (m *flakiModuleLoggingMW) HealthChecks(ctx context.Context) []FlakiReport {
 	defer func(begin time.Time) {
 		m.logger.Log("unit", "HealthChecks", "correlation_id", ctx.Value("correlation_id").(string), "took", time.Since(begin))

@@ -5,23 +5,16 @@ package common_test
 import (
 	"context"
 	"fmt"
-	"testing"
-	"time"
 	"math/rand"
 	"strconv"
- 
+	"testing"
+	"time"
+
 	. "github.com/cloudtrust/common-healthcheck"
 	mock "github.com/cloudtrust/common-healthcheck/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-) 
-
-type asdf struct{}
-
-func (a *asdf) String() string {
-	fmt.Println("called")
-	return "asdf"
-}
+)
 
 func TestInfluxHealthChecks(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
@@ -60,7 +53,7 @@ func TestNoopInfluxHealthChecks(t *testing.T) {
 
 	// HealthChecks.
 	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "ping", report.Name)
+	assert.Equal(t, "influx", report.Name)
 	assert.Zero(t, report.Duration)
 	assert.Equal(t, Deactivated, report.Status)
 	assert.Zero(t, report.Error)
@@ -93,12 +86,12 @@ func TestInfluxModuleLoggingMW(t *testing.T) {
 	assert.Panics(t, f)
 }
 
-func TestInfluxReportMarshalJSON(t *testing.T){
+func TestInfluxReportMarshalJSON(t *testing.T) {
 	var report = &InfluxReport{
-		Name: "Influx",
+		Name:     "Influx",
 		Duration: 1 * time.Second,
-		Status: OK,
-		Error: fmt.Errorf("Error"),
+		Status:   OK,
+		Error:    fmt.Errorf("Error"),
 	}
 
 	json, err := report.MarshalJSON()

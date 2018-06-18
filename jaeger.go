@@ -2,9 +2,9 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
-	"encoding/json"
 
 	"github.com/coreos/go-systemd/dbus"
 	"github.com/go-kit/kit/log"
@@ -14,24 +14,6 @@ import (
 const (
 	agentSystemDUnitName = "agent.service"
 )
-
-// JaegerModule is the health check module for jaeger.
-type JaegerModule struct {
-	conn                    SystemDConn
-	collectorHealthCheckURL string
-	httpClient              JaegerHTTPClient
-	enabled                 bool
-}
-
-// systemDConn is interface of systemd D-Bus connection.
-type SystemDConn interface {
-	ListUnitsByNames(units []string) ([]dbus.UnitStatus, error)
-}
-
-// jaegerHTTPClient is the interface of the http client.
-type JaegerHTTPClient interface {
-	Get(string) (*http.Response, error)
-}
 
 // NewJaegerModule returns the jaeger health module.
 func NewJaegerModule(conn SystemDConn, httpClient JaegerHTTPClient, collectorHealthCheckURL string, enabled bool) *JaegerModule {
@@ -43,6 +25,24 @@ func NewJaegerModule(conn SystemDConn, httpClient JaegerHTTPClient, collectorHea
 	}
 }
 
+// JaegerModule is the health check module for jaeger.
+type JaegerModule struct {
+	conn                    SystemDConn
+	collectorHealthCheckURL string
+	httpClient              JaegerHTTPClient
+	enabled                 bool
+}
+
+// SystemDConn is interface of systemd D-Bus connection.
+type SystemDConn interface {
+	ListUnitsByNames(units []string) ([]dbus.UnitStatus, error)
+}
+
+// JaegerHTTPClient is the interface of the http client.
+type JaegerHTTPClient interface {
+	Get(string) (*http.Response, error)
+}
+
 // JaegerReport is the health report returned by the jaeger module.
 type JaegerReport struct {
 	Name     string
@@ -51,23 +51,27 @@ type JaegerReport struct {
 	Error    error
 }
 
-
-func (i *JaegerReport) MarshalJSON() ([]byte, error) {
+// MarshalJSON marshal the jaeger report.
+func (r *JaegerReport) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Name     string `json:"name"`
 		Duration string `json:"duration"`
 		Status   string `json:"status"`
 		Error    string `json:"error"`
 	}{
-		Name: i.Name,
-		Duration: i.Duration.String(),
-		Status: i.Status.String(),
-		Error: err(i.Error),
+		Name:     r.Name,
+		Duration: r.Duration.String(),
+		Status:   r.Status.String(),
+		Error:    err(r.Error),
 	})
 }
 
 // HealthChecks executes all health checks for Jaeger.
 func (m *JaegerModule) HealthChecks(context.Context) []JaegerReport {
+	if !m.enabled {
+		return []JaegerReport{{Name: "jaeger", Status: Deactivated}}
+	}
+
 	var reports = []JaegerReport{}
 	reports = append(reports, m.jaegerSystemDCheck())
 	reports = append(reports, m.jaegerCollectorPing())
@@ -76,13 +80,6 @@ func (m *JaegerModule) HealthChecks(context.Context) []JaegerReport {
 
 func (m *JaegerModule) jaegerSystemDCheck() JaegerReport {
 	var healthCheckName = "jaeger agent systemd unit check"
-
-	if !m.enabled {
-		return JaegerReport{
-			Name:   healthCheckName,
-			Status: Deactivated,
-		}
-	}
 
 	var now = time.Now()
 	var units, err = m.conn.ListUnitsByNames([]string{agentSystemDUnitName})
@@ -112,16 +109,8 @@ func (m *JaegerModule) jaegerSystemDCheck() JaegerReport {
 	}
 }
 
-
 func (m *JaegerModule) jaegerCollectorPing() JaegerReport {
 	var healthCheckName = "ping jaeger collector"
-
-	if !m.enabled {
-		return JaegerReport{
-			Name:   healthCheckName,
-			Status: Deactivated,
-		}
-	}
 
 	// query jaeger collector health check URL
 	var now = time.Now()
@@ -149,6 +138,16 @@ func (m *JaegerModule) jaegerCollectorPing() JaegerReport {
 	}
 }
 
+// MakeJaegerModuleLoggingMW makes a logging middleware at module level.
+func MakeJaegerModuleLoggingMW(logger log.Logger) func(JaegerHealthChecker) JaegerHealthChecker {
+	return func(next JaegerHealthChecker) JaegerHealthChecker {
+		return &jaegerModuleLoggingMW{
+			logger: logger,
+			next:   next,
+		}
+	}
+}
+
 // JaegerHealthChecker is the interface of the jaeger health check module.
 type JaegerHealthChecker interface {
 	HealthChecks(context.Context) []JaegerReport
@@ -160,17 +159,7 @@ type jaegerModuleLoggingMW struct {
 	next   JaegerHealthChecker
 }
 
-// MakeJaegerModuleLoggingMW makes a logging middleware at module level.
-func MakeJaegerModuleLoggingMW(logger log.Logger) func(JaegerHealthChecker) JaegerHealthChecker {
-	return func(next JaegerHealthChecker) JaegerHealthChecker {
-		return &jaegerModuleLoggingMW{
-			logger: logger,
-			next:   next,
-		}
-	}
-}
-
-// jaegerModuleLoggingMW implements Module.
+// jaegerModuleLoggingMW implements JaegerHealthChecker. There must be a key "correlation_id" with a string value in the context.
 func (m *jaegerModuleLoggingMW) HealthChecks(ctx context.Context) []JaegerReport {
 	defer func(begin time.Time) {
 		m.logger.Log("unit", "HealthChecks", "correlation_id", ctx.Value("correlation_id").(string), "took", time.Since(begin))

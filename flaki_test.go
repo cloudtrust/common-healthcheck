@@ -5,11 +5,11 @@ package common_test
 
 import (
 	"context"
-	"testing"
-	"strconv"
+	"fmt"
 	"math/rand"
+	"strconv"
+	"testing"
 	"time"
-	 "fmt"
 
 	. "github.com/cloudtrust/common-healthcheck"
 	mock "github.com/cloudtrust/common-healthcheck/mock"
@@ -19,7 +19,7 @@ import (
 
 func TestFlakiHealthChecks(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish() 
+	defer mockCtrl.Finish()
 	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
 
 	var m = NewFlakiModule(mockFlakiClient)
@@ -34,7 +34,7 @@ func TestFlakiHealthChecks(t *testing.T) {
 
 func TestFlakiFailureHealthChecks(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish() 
+	defer mockCtrl.Finish()
 	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
 
 	var m = NewFlakiModule(mockFlakiClient)
@@ -60,11 +60,11 @@ func TestFlakiModuleLoggingMW(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	var corrID = strconv.FormatUint(rand.Uint64(), 10)
 	var ctx = context.WithValue(context.Background(), "correlation_id", corrID)
-	
+
 	mockFlakiClient.EXPECT().NextValidID().Return("000-000-000", nil).Times(1)
 	mockLogger.EXPECT().Log("unit", "HealthChecks", "correlation_id", corrID, "took", gomock.Any()).Return(nil).Times(1)
 	m.HealthChecks(ctx)
- 
+
 	mockFlakiClient.EXPECT().NextValidID().Return("000-000-000", nil).Times(1)
 	// Without correlation ID.
 	var f = func() {
@@ -74,7 +74,7 @@ func TestFlakiModuleLoggingMW(t *testing.T) {
 }
 
 func TestFlakiReportMarshalJSON(t *testing.T) {
-	var report = &JaegerReport{
+	var report = &FlakiReport{
 		Name:     "Flaki",
 		Duration: 1 * time.Second,
 		Status:   OK,

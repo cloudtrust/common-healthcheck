@@ -1,7 +1,7 @@
 package common
 
-
 // Status is the status of the health check.
+//go:generate stringer -type=Status
 type Status int
 
 const (
@@ -14,16 +14,6 @@ const (
 	// Deactivated is the status for a service that is deactivated, e.g. we can disable error tracking, instrumenting, tracing,...
 	Deactivated
 )
-
-func (s Status) String() string {
-	var names = []string{"OK", "KO", "Degraded", "Deactivated"}
-
-	if s < OK || s > Deactivated {
-		return "Unknown"
-	}
-
-	return names[s]
-}
 
 // Report contains the result of one health test.
 type Report struct {

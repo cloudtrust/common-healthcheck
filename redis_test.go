@@ -1,15 +1,15 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/redis.go -package=mock -mock_names=RedisClient=RedisClient  github.com/cloudtrust/common-healthcheck RedisClient
+//go:generate mockgen -destination=./mock/redis.go -package=mock -mock_names=RedisClient=RedisClient github.com/cloudtrust/common-healthcheck RedisClient
 
 import (
 	"context"
 	"fmt"
-	"testing"
-	"time"
 	"math/rand"
 	"strconv"
- 
+	"testing"
+	"time"
+
 	. "github.com/cloudtrust/common-healthcheck"
 	mock "github.com/cloudtrust/common-healthcheck/mock"
 	"github.com/golang/mock/gomock"
@@ -21,7 +21,7 @@ func TestRedisHealthChecks(t *testing.T) {
 	defer mockCtrl.Finish()
 	var mockRedis = mock.NewRedisClient(mockCtrl)
 
-	var m = NewRedisModule(mockRedis, true) 
+	var m = NewRedisModule(mockRedis, true)
 
 	// HealthChecks
 	{
@@ -48,7 +48,7 @@ func TestNoopRedisHealthChecks(t *testing.T) {
 	var m = NewRedisModule(nil, false)
 
 	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "ping", report.Name)
+	assert.Equal(t, "redis", report.Name)
 	assert.Zero(t, report.Duration)
 	assert.Equal(t, Deactivated, report.Status)
 	assert.Zero(t, report.Error)
@@ -60,7 +60,7 @@ func TestRedisModuleLoggingMW(t *testing.T) {
 	var mockRedis = mock.NewRedisClient(mockCtrl)
 	var mockLogger = mock.NewLogger(mockCtrl)
 
-	var module = NewRedisModule(mockRedis, true) 
+	var module = NewRedisModule(mockRedis, true)
 	var m = MakeRedisModuleLoggingMW(mockLogger)(module)
 
 	// Context with correlation ID.
@@ -81,7 +81,7 @@ func TestRedisModuleLoggingMW(t *testing.T) {
 }
 
 func TestRedisReportMarshalJSON(t *testing.T) {
-	var report = &JaegerReport{
+	var report = &RedisReport{
 		Name:     "Redis",
 		Duration: 1 * time.Second,
 		Status:   OK,
