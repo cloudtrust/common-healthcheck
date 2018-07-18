@@ -3,11 +3,17 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
+
+// RedisCheckNames contains the list of all valid tests names.
+var RedisCheckNames = map[string]struct{}{
+	"":     struct{}{},
+	"ping": struct{}{},
+}
 
 // NewRedisModule returns the redis health module.
 func NewRedisModule(redis RedisClient, enabled bool) *RedisModule {
@@ -28,91 +34,49 @@ type RedisClient interface {
 	Do(cmd string, args ...interface{}) (interface{}, error)
 }
 
-// RedisReport is the health report returned by the redis module.
-type RedisReport struct {
-	Name     string
-	Duration time.Duration
-	Status   Status
-	Error    error
+type redisReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-// MarshalJSON marshal the redis report.
-func (r *RedisReport) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
-		Name     string `json:"name"`
-		Duration string `json:"duration"`
-		Status   string `json:"status"`
-		Error    string `json:"error"`
-	}{
-		Name:     r.Name,
-		Duration: r.Duration.String(),
-		Status:   r.Status.String(),
-		Error:    err(r.Error),
-	})
-}
-
-// HealthChecks executes all health checks for Redis.
-func (m *RedisModule) HealthChecks(context.Context) []RedisReport {
+// HealthCheck executes the desired influx health check.
+func (m *RedisModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return []RedisReport{{Name: "redis", Status: Deactivated}}
+		return json.MarshalIndent(influxReport{Name: "redis", Status: Deactivated.String()}, "", "  ")
 	}
 
-	var reports = []RedisReport{}
-	reports = append(reports, m.redisPingCheck())
-	return reports
+	switch name {
+	case "":
+		var reports []redisReport
+		reports = append(reports, m.redisPing())
+		return json.MarshalIndent(reports, "", "  ")
+	case "ping":
+		return json.MarshalIndent(m.redisPing(), "", "  ")
+	default:
+		// Should not happen: there is a middleware validating the inputs name.
+		panic(fmt.Sprintf("Unknown redis health check name: %v", name))
+	}
 }
 
-func (m *RedisModule) redisPingCheck() RedisReport {
-	var healthCheckName = "ping"
+func (m *RedisModule) redisPing() redisReport {
+	var name = "ping"
+	var status = OK
 
 	var now = time.Now()
 	var _, err = m.redis.Do("PING")
 	var duration = time.Since(now)
 
-	var hcErr error
-	var s Status
-	switch {
-	case err != nil:
-		hcErr = errors.Wrap(err, "could not ping redis")
-		s = KO
-	default:
-		s = OK
+	if err != nil {
+		status = KO
+		err = errors.Wrap(err, "could not ping redis")
 	}
 
-	return RedisReport{
-		Name:     healthCheckName,
-		Duration: duration,
-		Status:   s,
-		Error:    hcErr,
+	return redisReport{
+		Name:     name,
+		Duration: duration.String(),
+		Status:   status.String(),
+		Error:    str(err),
 	}
-}
-
-// MakeRedisModuleLoggingMW makes a logging middleware at module level.
-func MakeRedisModuleLoggingMW(logger log.Logger) func(RedisHealthChecker) RedisHealthChecker {
-	return func(next RedisHealthChecker) RedisHealthChecker {
-		return &redisModuleLoggingMW{
-			logger: logger,
-			next:   next,
-		}
-	}
-}
-
-// RedisHealthChecker is the interface of the redis health check module.
-type RedisHealthChecker interface {
-	HealthChecks(context.Context) []RedisReport
-}
-
-// Logging middleware at module level.
-type redisModuleLoggingMW struct {
-	logger log.Logger
-	next   RedisHealthChecker
-}
-
-// redisModuleLoggingMW implements RedisHealthChecker. There must be a key "correlation_id" with a string value in the context.
-func (m *redisModuleLoggingMW) HealthChecks(ctx context.Context) []RedisReport {
-	defer func(begin time.Time) {
-		m.logger.Log("unit", "HealthChecks", "correlation_id", ctx.Value("correlation_id").(string), "took", time.Since(begin))
-	}(time.Now())
-
-	return m.next.HealthChecks(ctx)
 }

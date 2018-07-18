@@ -4,11 +4,11 @@ package common_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -19,100 +19,203 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestJaegerHealthChecks(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
-
-	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer s.Close()
-
-	var m = NewJaegerModule(mockSystemDConn, s.Client(), "jaeger-collector:14269", true)
-
-	var units = []dbus.UnitStatus{{Name: "agent.service", ActiveState: "active"}}
-
-	// HealthChecks
-	{
-		mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(units, nil).Times(1)
-		var report = m.HealthChecks(context.Background())[0]
-		assert.Equal(t, "jaeger agent systemd unit check", report.Name)
-		assert.NotZero(t, report.Duration)
-		assert.Equal(t, OK, report.Status)
-		assert.Zero(t, report.Error)
-	}
-
-	// SystemD fail.
-	{
-		mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(nil, fmt.Errorf("fail")).Times(1)
-		var report = m.HealthChecks(context.Background())[0]
-		assert.Equal(t, "jaeger agent systemd unit check", report.Name)
-		assert.NotZero(t, report.Duration)
-		assert.Equal(t, KO, report.Status)
-		assert.NotZero(t, report.Error)
-	}
-}
-
-func TestNoopJaegerHealthChecks(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
-
-	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer s.Close()
-
-	var m = NewJaegerModule(mockSystemDConn, s.Client(), "jaeger-collector:14269", false)
-
-	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "jaeger", report.Name)
-	assert.Zero(t, report.Duration)
-	assert.Equal(t, Deactivated, report.Status)
-	assert.Zero(t, report.Error)
-}
-
-func TestJaegerModuleLoggingMW(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
-	var mockLogger = mock.NewLogger(mockCtrl)
-
-	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer s.Close()
-
-	var module = NewJaegerModule(mockSystemDConn, s.Client(), "jaeger-collector:14269", false)
-
-	var m = MakeJaegerModuleLoggingMW(mockLogger)(module)
-
-	// Context with correlation ID.
+func init() {
 	rand.Seed(time.Now().UnixNano())
-	var corrID = strconv.FormatUint(rand.Uint64(), 10)
-	var ctx = context.WithValue(context.Background(), "correlation_id", corrID)
+}
 
-	mockLogger.EXPECT().Log("unit", "HealthChecks", "correlation_id", corrID, "took", gomock.Any()).Return(nil).Times(1)
-	m.HealthChecks(ctx)
+type jaegerReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
 
-	// Without correlation ID.
+func TestJaegerDisabled(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer s.Close()
+
+	var (
+		enabled = false
+		url     = s.URL[7:] // strip http:// from URL
+		m       = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
+	)
+
+	var report, err = m.HealthCheck(context.Background(), "agent")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var r = jaegerReport{}
+	assert.Nil(t, json.Unmarshal(report, &r))
+	assert.Equal(t, "jaeger", r.Name)
+	assert.Equal(t, "Deactivated", r.Status)
+	assert.Zero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestJaegerAgent(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer s.Close()
+
+	var (
+		enabled = true
+		url     = s.URL[7:] // strip http:// from URL
+		m       = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
+		units   = []dbus.UnitStatus{{Name: "agent.service", ActiveState: "active"}}
+	)
+
+	mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(units, nil).Times(1)
+	var report, err = m.HealthCheck(context.Background(), "agent")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var r = jaegerReport{}
+	assert.Nil(t, json.Unmarshal(report, &r))
+	assert.Equal(t, "agent systemd unit", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestJaegerCollector(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer s.Close()
+
+	var (
+		enabled = true
+		url     = s.URL[7:] // strip http:// from URL
+		m       = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
+	)
+
+	var report, err = m.HealthCheck(context.Background(), "collector")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var r = jaegerReport{}
+	assert.Nil(t, json.Unmarshal(report, &r))
+	assert.Equal(t, "ping collector", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestJaegerAllChecks(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer s.Close()
+
+	var (
+		enabled = true
+		url     = s.URL[7:] // strip http:// from URL
+		m       = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
+		units   = []dbus.UnitStatus{{Name: "agent.service", ActiveState: "active"}}
+	)
+
+	mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(units, nil).Times(1)
+	var report, err = m.HealthCheck(context.Background(), "")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var r = []jaegerReport{}
+	assert.Nil(t, json.Unmarshal(report, &r))
+
+	var agentReport = r[0]
+	assert.Equal(t, "agent systemd unit", agentReport.Name)
+	assert.Equal(t, "OK", agentReport.Status)
+	assert.NotZero(t, agentReport.Duration)
+	assert.Zero(t, agentReport.Error)
+
+	var collectorReport = r[1]
+	assert.Equal(t, "ping collector", collectorReport.Name)
+	assert.Equal(t, "OK", collectorReport.Status)
+	assert.NotZero(t, collectorReport.Duration)
+	assert.Zero(t, collectorReport.Error)
+}
+
+func TestJaegerAgentFailure(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer s.Close()
+
+	var (
+		enabled = true
+		url     = s.URL[7:] // strip http:// from URL
+		m       = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
+	)
+
+	var tsts = []struct {
+		mockUnitsStatus []dbus.UnitStatus
+		mockError       error
+	}{
+		// Systemd conn error
+		{nil, fmt.Errorf("fail")},
+		// Empty systemd unit list
+		{[]dbus.UnitStatus{}, nil},
+		// Unit status not 'active'
+		{[]dbus.UnitStatus{{ActiveState: "inactive"}}, nil},
+	}
+
+	for _, tst := range tsts {
+		mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(tst.mockUnitsStatus, tst.mockError).Times(1)
+		var report, err = m.HealthCheck(context.Background(), "agent")
+		assert.Nil(t, err)
+
+		// Check that the report is a valid json
+		var r = jaegerReport{}
+		assert.Nil(t, json.Unmarshal(report, &r))
+		assert.Equal(t, "agent systemd unit", r.Name)
+		assert.Equal(t, "KO", r.Status)
+		assert.NotZero(t, r.Duration)
+		assert.NotZero(t, r.Error)
+	}
+}
+
+func TestJaegerUnkownHealthCheck(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSystemDConn = mock.NewSystemDConn(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer s.Close()
+
+	var (
+		enabled         = true
+		url             = s.URL[7:] // strip http:// from URL
+		healthCheckName = "unknown"
+		m               = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
+	)
+
 	var f = func() {
-		m.HealthChecks(context.Background())
+		m.HealthCheck(context.Background(), healthCheckName)
 	}
 	assert.Panics(t, f)
-}
-
-func TestJaegerReportMarshalJSON(t *testing.T) {
-	var report = &JaegerReport{
-		Name:     "Jaeger",
-		Duration: 1 * time.Second,
-		Status:   OK,
-		Error:    fmt.Errorf("Error"),
-	}
-
-	json, err := report.MarshalJSON()
-
-	assert.Nil(t, err)
-	assert.Equal(t, "{\"name\":\"Jaeger\",\"duration\":\"1s\",\"status\":\"OK\",\"error\":\"Error\"}", string(json))
 }
