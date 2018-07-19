@@ -44,20 +44,21 @@ type cockroachReport struct {
 // HealthCheck executes the desired cockroach health check.
 func (m *CockroachModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return json.MarshalIndent(cockroachReport{Name: "cockroach", Status: Deactivated.String()}, "", "  ")
+		return json.MarshalIndent([]cockroachReport{{Name: "cockroach", Status: Deactivated.String()}}, "", "  ")
 	}
 
+	var reports []cockroachReport
 	switch name {
 	case "":
-		var reports []cockroachReport
 		reports = append(reports, m.cockroachPing())
-		return json.MarshalIndent(reports, "", "  ")
 	case "ping":
-		return json.MarshalIndent(m.cockroachPing(), "", "  ")
+		reports = append(reports, m.cockroachPing())
 	default:
 		// Should not happen: there is a middleware validating the inputs name.
 		panic(fmt.Sprintf("Unknown cockroach health check name: %v", name))
 	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
 func (m *CockroachModule) cockroachPing() cockroachReport {

@@ -46,12 +46,14 @@ func TestJaegerDisabled(t *testing.T) {
 		m       = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
 	)
 
-	var report, err = m.HealthCheck(context.Background(), "agent")
+	var jsonReport, err = m.HealthCheck(context.Background(), "agent")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = jaegerReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []jaegerReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "jaeger", r.Name)
 	assert.Equal(t, "Deactivated", r.Status)
 	assert.Zero(t, r.Duration)
@@ -76,12 +78,14 @@ func TestJaegerAgent(t *testing.T) {
 	)
 
 	mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(units, nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "agent")
+	var jsonReport, err = m.HealthCheck(context.Background(), "agent")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = jaegerReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []jaegerReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "agent systemd unit", r.Name)
 	assert.Equal(t, "OK", r.Status)
 	assert.NotZero(t, r.Duration)
@@ -104,12 +108,14 @@ func TestJaegerCollector(t *testing.T) {
 		m       = NewJaegerModule(mockSystemDConn, s.Client(), url, enabled)
 	)
 
-	var report, err = m.HealthCheck(context.Background(), "collector")
+	var jsonReport, err = m.HealthCheck(context.Background(), "collector")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = jaegerReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []jaegerReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping collector", r.Name)
 	assert.Equal(t, "OK", r.Status)
 	assert.NotZero(t, r.Duration)
@@ -134,24 +140,24 @@ func TestJaegerAllChecks(t *testing.T) {
 	)
 
 	mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(units, nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "")
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = []jaegerReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []jaegerReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
-	var agentReport = r[0]
-	assert.Equal(t, "agent systemd unit", agentReport.Name)
-	assert.Equal(t, "OK", agentReport.Status)
-	assert.NotZero(t, agentReport.Duration)
-	assert.Zero(t, agentReport.Error)
+	var r = report[0]
+	assert.Equal(t, "agent systemd unit", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
 
-	var collectorReport = r[1]
-	assert.Equal(t, "ping collector", collectorReport.Name)
-	assert.Equal(t, "OK", collectorReport.Status)
-	assert.NotZero(t, collectorReport.Duration)
-	assert.Zero(t, collectorReport.Error)
+	r = report[1]
+	assert.Equal(t, "ping collector", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
 }
 
 func TestJaegerAgentFailure(t *testing.T) {
@@ -184,12 +190,14 @@ func TestJaegerAgentFailure(t *testing.T) {
 
 	for _, tst := range tsts {
 		mockSystemDConn.EXPECT().ListUnitsByNames([]string{"agent.service"}).Return(tst.mockUnitsStatus, tst.mockError).Times(1)
-		var report, err = m.HealthCheck(context.Background(), "agent")
+		var jsonReport, err = m.HealthCheck(context.Background(), "agent")
 		assert.Nil(t, err)
 
 		// Check that the report is a valid json
-		var r = jaegerReport{}
-		assert.Nil(t, json.Unmarshal(report, &r))
+		var report = []jaegerReport{}
+		assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+		var r = report[0]
 		assert.Equal(t, "agent systemd unit", r.Name)
 		assert.Equal(t, "KO", r.Status)
 		assert.NotZero(t, r.Duration)

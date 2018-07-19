@@ -37,12 +37,14 @@ func TestInfluxDisabled(t *testing.T) {
 		m       = NewInfluxModule(mockInflux, enabled)
 	)
 
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = influxReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []influxReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "influx", r.Name)
 	assert.Equal(t, "Deactivated", r.Status)
 	assert.Zero(t, r.Duration)
@@ -61,12 +63,14 @@ func TestInfluxPing(t *testing.T) {
 	)
 
 	mockInflux.EXPECT().Ping(5*time.Second).Return(d, "", nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = influxReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []influxReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "OK", r.Status)
 	assert.NotZero(t, r.Duration)
@@ -85,18 +89,18 @@ func TestInfluxAllChecks(t *testing.T) {
 	)
 
 	mockInflux.EXPECT().Ping(5*time.Second).Return(d, "", nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "")
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = []influxReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []influxReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
-	var pingReport = r[0]
-	assert.Equal(t, "ping", pingReport.Name)
-	assert.Equal(t, "OK", pingReport.Status)
-	assert.NotZero(t, pingReport.Duration)
-	assert.Zero(t, pingReport.Error)
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
 }
 
 func TestInfluxFailure(t *testing.T) {
@@ -111,12 +115,14 @@ func TestInfluxFailure(t *testing.T) {
 	)
 
 	mockInflux.EXPECT().Ping(5*time.Second).Return(d, "", fmt.Errorf("fail")).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = influxReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []influxReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "KO", r.Status)
 	assert.NotZero(t, r.Duration)

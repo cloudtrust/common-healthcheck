@@ -54,23 +54,24 @@ type jaegerReport struct {
 // HealthCheck executes the desired jaeger health check.
 func (m *JaegerModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return json.MarshalIndent(jaegerReport{Name: "jaeger", Status: Deactivated.String()}, "", "  ")
+		return json.MarshalIndent([]jaegerReport{{Name: "jaeger", Status: Deactivated.String()}}, "", "  ")
 	}
 
+	var reports []jaegerReport
 	switch name {
 	case "":
-		var reports []jaegerReport
 		reports = append(reports, m.jaegerSystemDCheck())
 		reports = append(reports, m.jaegerCollectorPing())
-		return json.MarshalIndent(reports, "", "  ")
 	case "agent":
-		return json.MarshalIndent(m.jaegerSystemDCheck(), "", "  ")
+		reports = append(reports, m.jaegerSystemDCheck())
 	case "collector":
-		return json.MarshalIndent(m.jaegerCollectorPing(), "", "  ")
+		reports = append(reports, m.jaegerCollectorPing())
 	default:
 		// Should not happen: there is a middleware validating the inputs name.
 		panic(fmt.Sprintf("Unknown jaeger health check name: %v", name))
 	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
 func (m *JaegerModule) jaegerSystemDCheck() jaegerReport {

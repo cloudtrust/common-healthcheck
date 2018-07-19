@@ -37,12 +37,14 @@ func TestRedisDisabled(t *testing.T) {
 		m       = NewRedisModule(mockRedis, enabled)
 	)
 
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = redisReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "redis", r.Name)
 	assert.Equal(t, "Deactivated", r.Status)
 	assert.Zero(t, r.Duration)
@@ -60,12 +62,14 @@ func TestRedisPing(t *testing.T) {
 	)
 
 	mockRedis.EXPECT().Do("PING").Return(nil, nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = redisReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "OK", r.Status)
 	assert.NotZero(t, r.Duration)
@@ -83,18 +87,18 @@ func TestRedisAllChecks(t *testing.T) {
 	)
 
 	mockRedis.EXPECT().Do("PING").Return(nil, nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "")
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = []redisReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
-	var pingReport = r[0]
-	assert.Equal(t, "ping", pingReport.Name)
-	assert.Equal(t, "OK", pingReport.Status)
-	assert.NotZero(t, pingReport.Duration)
-	assert.Zero(t, pingReport.Error)
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
 }
 
 func TestRedisFailure(t *testing.T) {
@@ -108,12 +112,14 @@ func TestRedisFailure(t *testing.T) {
 	)
 
 	mockRedis.EXPECT().Do("PING").Return(nil, fmt.Errorf("fail")).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = redisReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "KO", r.Status)
 	assert.NotZero(t, r.Duration)

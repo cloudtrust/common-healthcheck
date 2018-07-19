@@ -49,20 +49,21 @@ type sentryReport struct {
 // HealthCheck executes the desired influx health check.
 func (m *SentryModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return json.MarshalIndent(influxReport{Name: "sentry", Status: Deactivated.String()}, "", "  ")
+		return json.MarshalIndent([]influxReport{{Name: "sentry", Status: Deactivated.String()}}, "", "  ")
 	}
 
+	var reports []sentryReport
 	switch name {
 	case "":
-		var reports []sentryReport
 		reports = append(reports, m.sentryPing())
-		return json.MarshalIndent(reports, "", "  ")
 	case "ping":
-		return json.MarshalIndent(m.sentryPing(), "", "  ")
+		reports = append(reports, m.sentryPing())
 	default:
 		// Should not happen: there is a middleware validating the inputs name.
 		panic(fmt.Sprintf("Unknown sentry health check name: %v", name))
 	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
 func (m *SentryModule) sentryPing() sentryReport {

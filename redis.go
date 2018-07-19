@@ -44,20 +44,21 @@ type redisReport struct {
 // HealthCheck executes the desired influx health check.
 func (m *RedisModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return json.MarshalIndent(influxReport{Name: "redis", Status: Deactivated.String()}, "", "  ")
+		return json.MarshalIndent([]influxReport{{Name: "redis", Status: Deactivated.String()}}, "", "  ")
 	}
 
+	var reports []redisReport
 	switch name {
 	case "":
-		var reports []redisReport
 		reports = append(reports, m.redisPing())
-		return json.MarshalIndent(reports, "", "  ")
 	case "ping":
-		return json.MarshalIndent(m.redisPing(), "", "  ")
+		reports = append(reports, m.redisPing())
 	default:
 		// Should not happen: there is a middleware validating the inputs name.
 		panic(fmt.Sprintf("Unknown redis health check name: %v", name))
 	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
 func (m *RedisModule) redisPing() redisReport {

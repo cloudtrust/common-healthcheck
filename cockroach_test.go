@@ -37,12 +37,14 @@ func TestCockroachDisabled(t *testing.T) {
 		m       = NewCockroachModule(mockCockroach, enabled)
 	)
 
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = cockroachReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []cockroachReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "cockroach", r.Name)
 	assert.Equal(t, "Deactivated", r.Status)
 	assert.Zero(t, r.Duration)
@@ -60,12 +62,14 @@ func TestCockroachPing(t *testing.T) {
 	)
 
 	mockCockroach.EXPECT().Ping().Return(nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = cockroachReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []cockroachReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "OK", r.Status)
 	assert.NotZero(t, r.Duration)
@@ -83,18 +87,18 @@ func TestCockroachAllChecks(t *testing.T) {
 	)
 
 	mockCockroach.EXPECT().Ping().Return(nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "")
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = []cockroachReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []cockroachReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
-	var pingReport = r[0]
-	assert.Equal(t, "ping", pingReport.Name)
-	assert.Equal(t, "OK", pingReport.Status)
-	assert.NotZero(t, pingReport.Duration)
-	assert.Zero(t, pingReport.Error)
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
 }
 
 func TestCockroachFailure(t *testing.T) {
@@ -108,12 +112,14 @@ func TestCockroachFailure(t *testing.T) {
 	)
 
 	mockCockroach.EXPECT().Ping().Return(fmt.Errorf("fail")).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = cockroachReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []cockroachReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "KO", r.Status)
 	assert.NotZero(t, r.Duration)

@@ -45,12 +45,14 @@ func TestSentryDisabled(t *testing.T) {
 		m       = NewSentryModule(mockSentry, s.Client(), enabled)
 	)
 
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = sentryReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "sentry", r.Name)
 	assert.Equal(t, "Deactivated", r.Status)
 	assert.Zero(t, r.Duration)
@@ -75,12 +77,14 @@ func TestSentryPing(t *testing.T) {
 	)
 
 	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", url)).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = sentryReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "OK", r.Status)
 	assert.NotZero(t, r.Duration)
@@ -105,18 +109,18 @@ func TestSentryAllChecks(t *testing.T) {
 	)
 
 	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", url)).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "")
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = []sentryReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
-	var pingReport = r[0]
-	assert.Equal(t, "ping", pingReport.Name)
-	assert.Equal(t, "OK", pingReport.Status)
-	assert.NotZero(t, pingReport.Duration)
-	assert.Zero(t, pingReport.Error)
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
 }
 
 func TestSentryFailure(t *testing.T) {
@@ -137,12 +141,14 @@ func TestSentryFailure(t *testing.T) {
 	)
 
 	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", url)).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = sentryReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "ping", r.Name)
 	assert.Equal(t, "KO", r.Status)
 	assert.NotZero(t, r.Duration)

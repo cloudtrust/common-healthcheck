@@ -44,20 +44,21 @@ type flakiReport struct {
 // HealthCheck executes the desired influx health check.
 func (m *FlakiModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return json.MarshalIndent(influxReport{Name: "flaki", Status: Deactivated.String()}, "", "  ")
+		return json.MarshalIndent([]influxReport{{Name: "flaki", Status: Deactivated.String()}}, "", "  ")
 	}
 
+	var reports []flakiReport
 	switch name {
 	case "":
-		var reports []flakiReport
 		reports = append(reports, m.nextID())
-		return json.MarshalIndent(reports, "", "  ")
 	case "ping":
-		return json.MarshalIndent(m.nextID(), "", "  ")
+		reports = append(reports, m.nextID())
 	default:
 		// Should not happen: there is a middleware validating the inputs name.
 		panic(fmt.Sprintf("Unknown influx health check name: %v", name))
 	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
 func (m *FlakiModule) nextID() flakiReport {

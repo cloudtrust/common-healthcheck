@@ -44,20 +44,21 @@ type influxReport struct {
 // HealthCheck executes the desired influx health check.
 func (m *InfluxModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return json.MarshalIndent(influxReport{Name: "influx", Status: Deactivated.String()}, "", "  ")
+		return json.MarshalIndent([]influxReport{{Name: "influx", Status: Deactivated.String()}}, "", "  ")
 	}
 
+	var reports []influxReport
 	switch name {
 	case "":
-		var reports []influxReport
 		reports = append(reports, m.influxPing())
-		return json.MarshalIndent(reports, "", "  ")
 	case "ping":
-		return json.MarshalIndent(m.influxPing(), "", "  ")
+		reports = append(reports, m.influxPing())
 	default:
 		// Should not happen: there is a middleware validating the inputs name.
 		panic(fmt.Sprintf("Unknown influx health check name: %v", name))
 	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
 func (m *InfluxModule) influxPing() influxReport {

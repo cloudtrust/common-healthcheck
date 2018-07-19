@@ -38,12 +38,14 @@ func TestFlakiDisabled(t *testing.T) {
 		m       = NewFlakiModule(mockFlakiClient, enabled)
 	)
 
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = flakiReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "flaki", r.Name)
 	assert.Equal(t, "Deactivated", r.Status)
 	assert.Zero(t, r.Duration)
@@ -62,12 +64,14 @@ func TestFlakiPing(t *testing.T) {
 	)
 
 	mockFlakiClient.EXPECT().NextID(context.Background()).Return(id, nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = flakiReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "nextid", r.Name)
 	assert.Equal(t, "OK", r.Status)
 	assert.NotZero(t, r.Duration)
@@ -86,18 +90,18 @@ func TestFlakiAllChecks(t *testing.T) {
 	)
 
 	mockFlakiClient.EXPECT().NextID(context.Background()).Return(id, nil).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "")
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = []flakiReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
-	var pingReport = r[0]
-	assert.Equal(t, "nextid", pingReport.Name)
-	assert.Equal(t, "OK", pingReport.Status)
-	assert.NotZero(t, pingReport.Duration)
-	assert.Zero(t, pingReport.Error)
+	var r = report[0]
+	assert.Equal(t, "nextid", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
 }
 
 func TestFlakiFailure(t *testing.T) {
@@ -111,12 +115,14 @@ func TestFlakiFailure(t *testing.T) {
 	)
 
 	mockFlakiClient.EXPECT().NextID(context.Background()).Return("", fmt.Errorf("fail")).Times(1)
-	var report, err = m.HealthCheck(context.Background(), "ping")
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var r = flakiReport{}
-	assert.Nil(t, json.Unmarshal(report, &r))
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
 	assert.Equal(t, "nextid", r.Name)
 	assert.Equal(t, "KO", r.Status)
 	assert.NotZero(t, r.Duration)
