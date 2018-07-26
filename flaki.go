@@ -9,12 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// FlakiCheckNames contains the list of all valid tests names.
-var FlakiCheckNames = map[string]struct{}{
-	"":       struct{}{},
-	"nextid": struct{}{},
-}
-
 // NewFlakiModule returns the Flaki health module.
 func NewFlakiModule(client FlakiClient, enabled bool) *FlakiModule {
 	return &FlakiModule{

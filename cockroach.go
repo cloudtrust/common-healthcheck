@@ -9,12 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// CockroachCheckNames contains the list of all valid tests names.
-var CockroachCheckNames = map[string]struct{}{
-	"":     struct{}{},
-	"ping": struct{}{},
-}
-
 // NewCockroachModule returns the cockroach health module.
 func NewCockroachModule(cockroach CockroachClient, enabled bool) *CockroachModule {
 	return &CockroachModule{

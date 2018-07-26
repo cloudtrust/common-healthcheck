@@ -9,12 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// RedisCheckNames contains the list of all valid tests names.
-var RedisCheckNames = map[string]struct{}{
-	"":     struct{}{},
-	"ping": struct{}{},
-}
-
 // NewRedisModule returns the redis health module.
 func NewRedisModule(redis RedisClient, enabled bool) *RedisModule {
 	return &RedisModule{

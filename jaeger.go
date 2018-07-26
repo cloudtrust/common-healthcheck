@@ -14,13 +14,6 @@ const (
 	agentSystemDUnitName = "agent.service"
 )
 
-// JaegerCheckNames contains the list of all valid tests names.
-var JaegerCheckNames = map[string]struct{}{
-	"":          struct{}{},
-	"agent":     struct{}{},
-	"collector": struct{}{},
-}
-
 // NewJaegerModule returns the jaeger health module.
 func NewJaegerModule(conn SystemDConn, httpClient HTTPClient, collectorHealthHostPort string, enabled bool) *JaegerModule {
 	return &JaegerModule{

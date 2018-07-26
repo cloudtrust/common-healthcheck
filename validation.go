@@ -8,6 +8,16 @@ import (
 
 // MakeValidationMiddleware makes a middleware that validate the health check name comming from
 // the HTTP route.
+// Let's imagine we have a module with the healthchecks "ping", "create", and "delete".
+// In the validValues map, we list the health check authorized, with "" that is a special value
+// for executing all healthchecks.
+//
+// var validValues = map[string]struct{}{
+//   "":       struct{}{},
+// 	 "ping":   struct{}{},
+//   "create": struct{}{},
+//   "delete": struct{}{},
+// }
 func MakeValidationMiddleware(validValues map[string]struct{}) func(HealthChecker) HealthChecker {
 	return func(next HealthChecker) HealthChecker {
 		return &validationMW{

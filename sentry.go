@@ -12,12 +12,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// SentryCheckNames contains the list of all valid tests names.
-var SentryCheckNames = map[string]struct{}{
-	"":     struct{}{},
-	"ping": struct{}{},
-}
-
 // NewSentryModule returns the sentry health module.
 func NewSentryModule(sentry SentryClient, httpClient HTTPClient, enabled bool) *SentryModule {
 	return &SentryModule{

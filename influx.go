@@ -9,12 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// InfluxCheckNames contains the list of all valid tests names.
-var InfluxCheckNames = map[string]struct{}{
-	"":     struct{}{},
-	"ping": struct{}{},
-}
-
 // NewInfluxModule returns the influx health module.
 func NewInfluxModule(influx InfluxClient, enabled bool) *InfluxModule {
 	return &InfluxModule{
