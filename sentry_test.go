@@ -1,15 +1,14 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/sentry.go -package=mock -mock_names=SentryClient=SentryClient,SentryHealthChecker=SentryHealthChecker github.com/cloudtrust/common-healthcheck SentryClient,SentryHealthChecker
-//go:generate mockgen -destination=./mock/logging.go -package=mock -mock_names=Logger=Logger github.com/go-kit/kit/log Logger
+//go:generate mockgen -destination=./mock/sentry.go -package=mock -mock_names=SentryClient=SentryClient github.com/cloudtrust/common-healthcheck SentryClient
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -19,87 +18,162 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSentryHealthChecks(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockSentry = mock.NewSentryClient(mockCtrl)
-
-	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer s.Close()
-
-	var m = NewSentryModule(mockSentry, s.Client(), true)
-
-	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", s.URL[7:])).Times(1)
-	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "ping", report.Name)
-	assert.NotZero(t, report.Duration)
-	assert.Equal(t, OK, report.Status)
-	assert.Zero(t, report.Error)
-}
-
-func TestNoopSentryHealthChecks(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockSentry = mock.NewSentryClient(mockCtrl)
-
-	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer s.Close()
-
-	var m = NewSentryModule(mockSentry, s.Client(), false)
-
-	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "sentry", report.Name)
-	assert.Zero(t, report.Duration)
-	assert.Equal(t, Deactivated, report.Status)
-	assert.Zero(t, report.Error)
-}
-
-func TestSentryModuleLoggingMW(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockSentry = mock.NewSentryClient(mockCtrl)
-	var mockLogger = mock.NewLogger(mockCtrl)
-
-	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer s.Close()
-
-	var module = NewSentryModule(mockSentry, s.Client(), false)
-	var m = MakeSentryModuleLoggingMW(mockLogger)(module)
-
-	// Context with correlation ID.
+func init() {
 	rand.Seed(time.Now().UnixNano())
-	var corrID = strconv.FormatUint(rand.Uint64(), 10)
-	var ctx = context.WithValue(context.Background(), "correlation_id", corrID)
+}
 
-	mockLogger.EXPECT().Log("unit", "HealthChecks", "correlation_id", corrID, "took", gomock.Any()).Return(nil).Times(1)
-	m.HealthChecks(ctx)
+type sentryReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
 
-	// Without correlation ID.
+func TestSentryDisabled(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSentry = mock.NewSentryClient(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer s.Close()
+
+	var (
+		enabled = false
+		m       = NewSentryModule(mockSentry, s.Client(), enabled)
+	)
+
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "sentry", r.Name)
+	assert.Equal(t, "Deactivated", r.Status)
+	assert.Zero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestSentryPing(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSentry = mock.NewSentryClient(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer s.Close()
+
+	var (
+		enabled = true
+		url     = s.URL[7:]
+		m       = NewSentryModule(mockSentry, s.Client(), enabled)
+	)
+
+	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", url)).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestSentryAllChecks(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSentry = mock.NewSentryClient(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer s.Close()
+
+	var (
+		enabled = true
+		url     = s.URL[7:]
+		m       = NewSentryModule(mockSentry, s.Client(), enabled)
+	)
+
+	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", url)).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestSentryFailure(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSentry = mock.NewSentryClient(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ko"))
+	}))
+	defer s.Close()
+
+	var (
+		enabled = true
+		url     = s.URL[7:]
+		m       = NewSentryModule(mockSentry, s.Client(), enabled)
+	)
+
+	mockSentry.EXPECT().URL().Return(fmt.Sprintf("http://a:b@%s/api/1/store/", url)).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []sentryReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "KO", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.NotZero(t, r.Error)
+}
+
+func TestSentryUnkownHealthCheck(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockSentry = mock.NewSentryClient(mockCtrl)
+
+	var s = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ko"))
+	}))
+	defer s.Close()
+
+	var (
+		enabled         = true
+		m               = NewSentryModule(mockSentry, s.Client(), enabled)
+		healthCheckName = "unknown"
+	)
+
 	var f = func() {
-		m.HealthChecks(context.Background())
+		m.HealthCheck(context.Background(), healthCheckName)
 	}
 	assert.Panics(t, f)
-}
-
-func TestSentryReportMarshalJSON(t *testing.T) {
-	var report = &SentryReport{
-		Name:     "Sentry",
-		Duration: 1 * time.Second,
-		Status:   OK,
-		Error:    fmt.Errorf("Error"),
-	}
-
-	json, err := report.MarshalJSON()
-
-	assert.Nil(t, err)
-	assert.Equal(t, "{\"name\":\"Sentry\",\"duration\":\"1s\",\"status\":\"OK\",\"error\":\"Error\"}", string(json))
 }

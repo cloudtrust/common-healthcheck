@@ -9,12 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
 // NewSentryModule returns the sentry health module.
-func NewSentryModule(sentry SentryClient, httpClient sentryHTTPClient, enabled bool) *SentryModule {
+func NewSentryModule(sentry SentryClient, httpClient HTTPClient, enabled bool) *SentryModule {
 	return &SentryModule{
 		sentry:     sentry,
 		httpClient: httpClient,
@@ -25,7 +24,7 @@ func NewSentryModule(sentry SentryClient, httpClient sentryHTTPClient, enabled b
 // SentryModule is the health check module for sentry.
 type SentryModule struct {
 	sentry     SentryClient
-	httpClient sentryHTTPClient
+	httpClient HTTPClient
 	enabled    bool
 }
 
@@ -34,75 +33,59 @@ type SentryClient interface {
 	URL() string
 }
 
-// sentryHTTPClient is the interface of the http client.
-type sentryHTTPClient interface {
-	Get(string) (*http.Response, error)
+type sentryReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-// SentryReport is the health report returned by the sentry module.
-type SentryReport struct {
-	Name     string
-	Duration time.Duration
-	Status   Status
-	Error    error
-}
-
-// MarshalJSON marshal the sentry report.
-func (r *SentryReport) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
-		Name     string `json:"name"`
-		Duration string `json:"duration"`
-		Status   string `json:"status"`
-		Error    string `json:"error"`
-	}{
-		Name:     r.Name,
-		Duration: r.Duration.String(),
-		Status:   r.Status.String(),
-		Error:    err(r.Error),
-	})
-}
-
-// HealthChecks executes all health checks for Sentry.
-func (m *SentryModule) HealthChecks(context.Context) []SentryReport {
+// HealthCheck executes the desired influx health check.
+func (m *SentryModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return []SentryReport{{Name: "sentry", Status: Deactivated}}
+		return json.MarshalIndent([]influxReport{{Name: "sentry", Status: Deactivated.String()}}, "", "  ")
 	}
 
-	var reports = []SentryReport{}
-	reports = append(reports, m.sentryPingCheck())
-	return reports
+	var reports []sentryReport
+	switch name {
+	case "":
+		reports = append(reports, m.sentryPing())
+	case "ping":
+		reports = append(reports, m.sentryPing())
+	default:
+		// Should not happen: there is a middleware validating the inputs name.
+		panic(fmt.Sprintf("Unknown sentry health check name: %v", name))
+	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
-func (m *SentryModule) sentryPingCheck() SentryReport {
-	var healthCheckName = "ping"
-
-	var dsn = m.sentry.URL()
+func (m *SentryModule) sentryPing() sentryReport {
+	var name = "ping"
+	var status = OK
 
 	// Get Sentry health status.
 	var now = time.Now()
-	var err = pingSentry(dsn, m.httpClient)
+	var err = m.getSentryHealth()
 	var duration = time.Since(now)
 
-	var hcErr error
-	var s Status
-	switch {
-	case err != nil:
-		hcErr = errors.Wrap(err, "could not ping sentry")
-		s = KO
-	default:
-		s = OK
+	if err != nil {
+		status = KO
+		err = errors.Wrap(err, "could not ping sentry")
 	}
 
-	return SentryReport{
-		Name:     healthCheckName,
-		Duration: duration,
-		Status:   s,
-		Error:    hcErr,
+	return sentryReport{
+		Name:     name,
+		Duration: duration.String(),
+		Status:   status.String(),
+		Error:    str(err),
 	}
 }
 
-func pingSentry(dsn string, httpClient sentryHTTPClient) error {
+func (m *SentryModule) getSentryHealth() error {
 	// Build sentry health url from sentry dsn. The health url is <sentryURL>/_health
+	var dsn = m.sentry.URL()
+
 	var url string
 	if idx := strings.LastIndex(dsn, "/api/"); idx != -1 {
 		url = fmt.Sprintf("%s/_health", dsn[:idx])
@@ -112,7 +95,7 @@ func pingSentry(dsn string, httpClient sentryHTTPClient) error {
 	var res *http.Response
 	{
 		var err error
-		res, err = httpClient.Get(url)
+		res, err = m.httpClient.Get(url)
 		if err != nil {
 			return err
 		}
@@ -141,34 +124,4 @@ func pingSentry(dsn string, httpClient sentryHTTPClient) error {
 	}
 
 	return fmt.Errorf("response should be 'ok' but is: %v", string(response))
-}
-
-// MakeSentryModuleLoggingMW makes a logging middleware at module level.
-func MakeSentryModuleLoggingMW(logger log.Logger) func(SentryHealthChecker) SentryHealthChecker {
-	return func(next SentryHealthChecker) SentryHealthChecker {
-		return &sentryModuleLoggingMW{
-			logger: logger,
-			next:   next,
-		}
-	}
-}
-
-// SentryHealthChecker is the interface of the sentry health check module.
-type SentryHealthChecker interface {
-	HealthChecks(context.Context) []SentryReport
-}
-
-// Logging middleware at module level.
-type sentryModuleLoggingMW struct {
-	logger log.Logger
-	next   SentryHealthChecker
-}
-
-// sentryModuleLoggingMW implements SentryHealthChecker. There must be a key "correlation_id" with a string value in the context.
-func (m *sentryModuleLoggingMW) HealthChecks(ctx context.Context) []SentryReport {
-	defer func(begin time.Time) {
-		m.logger.Log("unit", "HealthChecks", "correlation_id", ctx.Value("correlation_id").(string), "took", time.Since(begin))
-	}(time.Now())
-
-	return m.next.HealthChecks(ctx)
 }

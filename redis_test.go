@@ -4,9 +4,9 @@ package common_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"testing"
 	"time"
 
@@ -16,80 +16,129 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRedisHealthChecks(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockRedis = mock.NewRedisClient(mockCtrl)
-
-	var m = NewRedisModule(mockRedis, true)
-
-	// HealthChecks
-	{
-		mockRedis.EXPECT().Do("PING").Return(nil, nil).Times(1)
-		var report = m.HealthChecks(context.Background())[0]
-		assert.Equal(t, "ping", report.Name)
-		assert.NotZero(t, report.Duration)
-		assert.Equal(t, OK, report.Status)
-		assert.Zero(t, report.Error)
-	}
-
-	// Redis fail.
-	{
-		mockRedis.EXPECT().Do("PING").Return(nil, fmt.Errorf("fail")).Times(1)
-		var report = m.HealthChecks(context.Background())[0]
-		assert.Equal(t, "ping", report.Name)
-		assert.NotZero(t, report.Duration)
-		assert.Equal(t, KO, report.Status)
-		assert.NotZero(t, report.Error)
-	}
-}
-
-func TestNoopRedisHealthChecks(t *testing.T) {
-	var m = NewRedisModule(nil, false)
-
-	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "redis", report.Name)
-	assert.Zero(t, report.Duration)
-	assert.Equal(t, Deactivated, report.Status)
-	assert.Zero(t, report.Error)
-}
-
-func TestRedisModuleLoggingMW(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockRedis = mock.NewRedisClient(mockCtrl)
-	var mockLogger = mock.NewLogger(mockCtrl)
-
-	var module = NewRedisModule(mockRedis, true)
-	var m = MakeRedisModuleLoggingMW(mockLogger)(module)
-
-	// Context with correlation ID.
+func init() {
 	rand.Seed(time.Now().UnixNano())
-	var corrID = strconv.FormatUint(rand.Uint64(), 10)
-	var ctx = context.WithValue(context.Background(), "correlation_id", corrID)
+}
 
-	mockRedis.EXPECT().Do(gomock.Any(), gomock.Any()).Times(1)
-	mockLogger.EXPECT().Log("unit", "HealthChecks", "correlation_id", corrID, "took", gomock.Any()).Return(nil).Times(1)
-	m.HealthChecks(ctx)
+type redisReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
 
-	// Without correlation ID.
-	mockRedis.EXPECT().Do(gomock.Any(), gomock.Any()).Times(1)
+func TestRedisDisabled(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockRedis = mock.NewRedisClient(mockCtrl)
+
+	var (
+		enabled = false
+		m       = NewRedisModule(mockRedis, enabled)
+	)
+
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "redis", r.Name)
+	assert.Equal(t, "Deactivated", r.Status)
+	assert.Zero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestRedisPing(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockRedis = mock.NewRedisClient(mockCtrl)
+
+	var (
+		enabled = true
+		m       = NewRedisModule(mockRedis, enabled)
+	)
+
+	mockRedis.EXPECT().Do("PING").Return(nil, nil).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestRedisAllChecks(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockRedis = mock.NewRedisClient(mockCtrl)
+
+	var (
+		enabled = true
+		m       = NewRedisModule(mockRedis, enabled)
+	)
+
+	mockRedis.EXPECT().Do("PING").Return(nil, nil).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestRedisFailure(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockRedis = mock.NewRedisClient(mockCtrl)
+
+	var (
+		enabled = true
+		m       = NewRedisModule(mockRedis, enabled)
+	)
+
+	mockRedis.EXPECT().Do("PING").Return(nil, fmt.Errorf("fail")).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []redisReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "ping", r.Name)
+	assert.Equal(t, "KO", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.NotZero(t, r.Error)
+}
+
+func TestRedisUnkownHealthCheck(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockRedis = mock.NewRedisClient(mockCtrl)
+
+	var (
+		enabled         = true
+		healthCheckName = "unknown"
+		m               = NewRedisModule(mockRedis, enabled)
+	)
+
 	var f = func() {
-		m.HealthChecks(context.Background())
+		m.HealthCheck(context.Background(), healthCheckName)
 	}
 	assert.Panics(t, f)
-}
-
-func TestRedisReportMarshalJSON(t *testing.T) {
-	var report = &RedisReport{
-		Name:     "Redis",
-		Duration: 1 * time.Second,
-		Status:   OK,
-		Error:    fmt.Errorf("Error"),
-	}
-
-	json, err := report.MarshalJSON()
-
-	assert.Nil(t, err)
-	assert.Equal(t, "{\"name\":\"Redis\",\"duration\":\"1s\",\"status\":\"OK\",\"error\":\"Error\"}", string(json))
 }

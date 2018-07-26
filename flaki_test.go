@@ -1,10 +1,10 @@
 package common_test
 
 //go:generate mockgen -destination=./mock/flaki.go -package=mock -mock_names=FlakiClient=FlakiClient  github.com/cloudtrust/common-healthcheck FlakiClient
-//go:generate mockgen -destination=./mock/logging.go -package=mock -mock_names=Logger=Logger github.com/go-kit/kit/log Logger
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -17,72 +17,131 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFlakiHealthChecks(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
-
-	var m = NewFlakiModule(mockFlakiClient)
-
-	mockFlakiClient.EXPECT().NextValidID().Return("00000-0000-0000", nil).Times(1)
-	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "Flaki ID generation", report.Name)
-	assert.NotZero(t, report.Duration)
-	assert.Equal(t, OK, report.Status)
-	assert.Zero(t, report.Error)
-}
-
-func TestFlakiFailureHealthChecks(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
-
-	var m = NewFlakiModule(mockFlakiClient)
-
-	mockFlakiClient.EXPECT().NextValidID().Return("", fmt.Errorf("Error")).Times(1)
-	var report = m.HealthChecks(context.Background())[0]
-	assert.Equal(t, "Flaki ID generation", report.Name)
-	assert.NotZero(t, report.Duration)
-	assert.Equal(t, KO, report.Status)
-	assert.Equal(t, "could not query flaki service: Error", report.Error.Error())
-}
-
-func TestFlakiModuleLoggingMW(t *testing.T) {
-	var mockCtrl = gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
-	var mockLogger = mock.NewLogger(mockCtrl)
-
-	var module = NewFlakiModule(mockFlakiClient)
-	var m = MakeFlakiModuleLoggingMW(mockLogger)(module)
-
-	// Context with correlation ID.
+func init() {
 	rand.Seed(time.Now().UnixNano())
-	var corrID = strconv.FormatUint(rand.Uint64(), 10)
-	var ctx = context.WithValue(context.Background(), "correlation_id", corrID)
+}
 
-	mockFlakiClient.EXPECT().NextValidID().Return("000-000-000", nil).Times(1)
-	mockLogger.EXPECT().Log("unit", "HealthChecks", "correlation_id", corrID, "took", gomock.Any()).Return(nil).Times(1)
-	m.HealthChecks(ctx)
+type flakiReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
 
-	mockFlakiClient.EXPECT().NextValidID().Return("000-000-000", nil).Times(1)
-	// Without correlation ID.
+func TestFlakiDisabled(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
+
+	var (
+		enabled = false
+		m       = NewFlakiModule(mockFlakiClient, enabled)
+	)
+
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "flaki", r.Name)
+	assert.Equal(t, "Deactivated", r.Status)
+	assert.Zero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestFlakiPing(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
+
+	var (
+		enabled = true
+		m       = NewFlakiModule(mockFlakiClient, enabled)
+		id      = strconv.FormatUint(rand.Uint64(), 10)
+	)
+
+	mockFlakiClient.EXPECT().NextID(context.Background()).Return(id, nil).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "nextid", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestFlakiAllChecks(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
+
+	var (
+		enabled = true
+		m       = NewFlakiModule(mockFlakiClient, enabled)
+		id      = strconv.FormatUint(rand.Uint64(), 10)
+	)
+
+	mockFlakiClient.EXPECT().NextID(context.Background()).Return(id, nil).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "nextid", r.Name)
+	assert.Equal(t, "OK", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.Zero(t, r.Error)
+}
+
+func TestFlakiFailure(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
+
+	var (
+		enabled = true
+		m       = NewFlakiModule(mockFlakiClient, enabled)
+	)
+
+	mockFlakiClient.EXPECT().NextID(context.Background()).Return("", fmt.Errorf("fail")).Times(1)
+	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
+	assert.Nil(t, err)
+
+	// Check that the report is a valid json
+	var report = []flakiReport{}
+	assert.Nil(t, json.Unmarshal(jsonReport, &report))
+
+	var r = report[0]
+	assert.Equal(t, "nextid", r.Name)
+	assert.Equal(t, "KO", r.Status)
+	assert.NotZero(t, r.Duration)
+	assert.NotZero(t, r.Error)
+}
+
+func TestFlakiUnkownHealthCheck(t *testing.T) {
+	var mockCtrl = gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var mockFlakiClient = mock.NewFlakiClient(mockCtrl)
+
+	var (
+		enabled         = true
+		healthCheckName = "unknown"
+		m               = NewFlakiModule(mockFlakiClient, enabled)
+	)
+
 	var f = func() {
-		m.HealthChecks(context.Background())
+		m.HealthCheck(context.Background(), healthCheckName)
 	}
 	assert.Panics(t, f)
-}
-
-func TestFlakiReportMarshalJSON(t *testing.T) {
-	var report = &FlakiReport{
-		Name:     "Flaki",
-		Duration: 1 * time.Second,
-		Status:   OK,
-		Error:    fmt.Errorf("Error"),
-	}
-
-	json, err := report.MarshalJSON()
-
-	assert.Nil(t, err)
-	assert.Equal(t, "{\"name\":\"Flaki\",\"duration\":\"1s\",\"status\":\"OK\",\"error\":\"Error\"}", string(json))
 }

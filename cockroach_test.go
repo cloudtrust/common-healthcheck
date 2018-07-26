@@ -1,6 +1,6 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/influx.go -package=mock -mock_names=InfluxClient=InfluxClient  github.com/cloudtrust/common-healthcheck InfluxClient
+//go:generate mockgen -destination=./mock/cockroach.go -package=mock -mock_names=CockroachClient=CockroachClient  github.com/cloudtrust/common-healthcheck CockroachClient
 
 import (
 	"context"
@@ -20,54 +20,53 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-type influxReport struct {
+type cockroachReport struct {
 	Name     string `json:"name"`
 	Status   string `json:"status"`
 	Duration string `json:"duration,omitempty"`
 	Error    string `json:"error,omitempty"`
 }
 
-func TestInfluxDisabled(t *testing.T) {
+func TestCockroachDisabled(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
 	defer mockCtrl.Finish()
-	var mockInflux = mock.NewInfluxClient(mockCtrl)
+	var mockCockroach = mock.NewCockroachClient(mockCtrl)
 
 	var (
 		enabled = false
-		m       = NewInfluxModule(mockInflux, enabled)
+		m       = NewCockroachModule(mockCockroach, enabled)
 	)
 
 	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var report = []influxReport{}
+	var report = []cockroachReport{}
 	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
 	var r = report[0]
-	assert.Equal(t, "influx", r.Name)
+	assert.Equal(t, "cockroach", r.Name)
 	assert.Equal(t, "Deactivated", r.Status)
 	assert.Zero(t, r.Duration)
 	assert.Zero(t, r.Error)
 }
 
-func TestInfluxPing(t *testing.T) {
+func TestCockroachPing(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
 	defer mockCtrl.Finish()
-	var mockInflux = mock.NewInfluxClient(mockCtrl)
+	var mockCockroach = mock.NewCockroachClient(mockCtrl)
 
 	var (
 		enabled = true
-		m       = NewInfluxModule(mockInflux, enabled)
-		d       = 1 * time.Second
+		m       = NewCockroachModule(mockCockroach, enabled)
 	)
 
-	mockInflux.EXPECT().Ping(5*time.Second).Return(d, "", nil).Times(1)
+	mockCockroach.EXPECT().Ping().Return(nil).Times(1)
 	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var report = []influxReport{}
+	var report = []cockroachReport{}
 	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
 	var r = report[0]
@@ -77,23 +76,22 @@ func TestInfluxPing(t *testing.T) {
 	assert.Zero(t, r.Error)
 }
 
-func TestInfluxAllChecks(t *testing.T) {
+func TestCockroachAllChecks(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
 	defer mockCtrl.Finish()
-	var mockInflux = mock.NewInfluxClient(mockCtrl)
+	var mockCockroach = mock.NewCockroachClient(mockCtrl)
 
 	var (
 		enabled = true
-		m       = NewInfluxModule(mockInflux, enabled)
-		d       = 1 * time.Second
+		m       = NewCockroachModule(mockCockroach, enabled)
 	)
 
-	mockInflux.EXPECT().Ping(5*time.Second).Return(d, "", nil).Times(1)
+	mockCockroach.EXPECT().Ping().Return(nil).Times(1)
 	var jsonReport, err = m.HealthCheck(context.Background(), "")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var report = []influxReport{}
+	var report = []cockroachReport{}
 	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
 	var r = report[0]
@@ -103,23 +101,22 @@ func TestInfluxAllChecks(t *testing.T) {
 	assert.Zero(t, r.Error)
 }
 
-func TestInfluxFailure(t *testing.T) {
+func TestCockroachFailure(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
 	defer mockCtrl.Finish()
-	var mockInflux = mock.NewInfluxClient(mockCtrl)
+	var mockCockroach = mock.NewCockroachClient(mockCtrl)
 
 	var (
 		enabled = true
-		m       = NewInfluxModule(mockInflux, enabled)
-		d       = 0 * time.Second
+		m       = NewCockroachModule(mockCockroach, enabled)
 	)
 
-	mockInflux.EXPECT().Ping(5*time.Second).Return(d, "", fmt.Errorf("fail")).Times(1)
+	mockCockroach.EXPECT().Ping().Return(fmt.Errorf("fail")).Times(1)
 	var jsonReport, err = m.HealthCheck(context.Background(), "ping")
 	assert.Nil(t, err)
 
 	// Check that the report is a valid json
-	var report = []influxReport{}
+	var report = []cockroachReport{}
 	assert.Nil(t, json.Unmarshal(jsonReport, &report))
 
 	var r = report[0]
@@ -129,15 +126,15 @@ func TestInfluxFailure(t *testing.T) {
 	assert.NotZero(t, r.Error)
 }
 
-func TestInfluxUnkownHealthCheck(t *testing.T) {
+func TestCockroachUnkownHealthCheck(t *testing.T) {
 	var mockCtrl = gomock.NewController(t)
 	defer mockCtrl.Finish()
-	var mockInflux = mock.NewInfluxClient(mockCtrl)
+	var mockCockroach = mock.NewCockroachClient(mockCtrl)
 
 	var (
 		enabled         = true
 		healthCheckName = "unknown"
-		m               = NewInfluxModule(mockInflux, enabled)
+		m               = NewCockroachModule(mockCockroach, enabled)
 	)
 
 	var f = func() {

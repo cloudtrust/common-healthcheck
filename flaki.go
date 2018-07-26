@@ -3,111 +3,75 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
 // NewFlakiModule returns the Flaki health module.
-func NewFlakiModule(client FlakiClient) *FlakiModule {
+func NewFlakiModule(client FlakiClient, enabled bool) *FlakiModule {
 	return &FlakiModule{
 		flakiClient: client,
+		enabled:     enabled,
 	}
 }
 
 // FlakiModule is the health check module for Flaki.
 type FlakiModule struct {
 	flakiClient FlakiClient
+	enabled     bool
 }
 
-// FlakiClient is the interface of Flaki.
+// FlakiClient is the interface of the Flaki client.
 type FlakiClient interface {
-	NextValidID() (string, error)
+	NextID(context.Context) (string, error)
 }
 
-// FlakiReport is the health report returned by the flaki module.
-type FlakiReport struct {
-	Name     string
-	Duration time.Duration
-	Status   Status
-	Error    error
+type flakiReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-// MarshalJSON marshal the flaki report.
-func (r *FlakiReport) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
-		Name     string `json:"name"`
-		Duration string `json:"duration"`
-		Status   string `json:"status"`
-		Error    string `json:"error"`
-	}{
-		Name:     r.Name,
-		Duration: r.Duration.String(),
-		Status:   r.Status.String(),
-		Error:    err(r.Error),
-	})
+// HealthCheck executes the desired influx health check.
+func (m *FlakiModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
+	if !m.enabled {
+		return json.MarshalIndent([]influxReport{{Name: "flaki", Status: Deactivated.String()}}, "", "  ")
+	}
+
+	var reports []flakiReport
+	switch name {
+	case "":
+		reports = append(reports, m.nextID())
+	case "ping":
+		reports = append(reports, m.nextID())
+	default:
+		// Should not happen: there is a middleware validating the inputs name.
+		panic(fmt.Sprintf("Unknown influx health check name: %v", name))
+	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
-// HealthChecks executes all health checks for Flaki.
-func (m *FlakiModule) HealthChecks(context.Context) []FlakiReport {
-	var reports = []FlakiReport{}
-	reports = append(reports, m.flakiNextIDCheck())
-	return reports
-}
+func (m *FlakiModule) nextID() flakiReport {
+	var name = "nextid"
+	var status = OK
 
-func (m *FlakiModule) flakiNextIDCheck() FlakiReport {
-	var healthCheckName = "Flaki ID generation"
-
-	// query flaki next valid ID
 	var now = time.Now()
-	var _, err = m.flakiClient.NextValidID()
+	var _, err = m.flakiClient.NextID(context.Background())
 	var duration = time.Since(now)
 
-	var hcErr error
-	var s Status
-	switch {
-	case err != nil:
-		hcErr = errors.Wrap(err, "could not query flaki service")
-		s = KO
-	default:
-		s = OK
+	if err != nil {
+		status = KO
+		err = errors.Wrap(err, "could not get ID from flaki")
 	}
 
-	return FlakiReport{
-		Name:     healthCheckName,
-		Duration: duration,
-		Status:   s,
-		Error:    hcErr,
+	return flakiReport{
+		Name:     name,
+		Duration: duration.String(),
+		Status:   status.String(),
+		Error:    str(err),
 	}
-}
-
-// MakeFlakiModuleLoggingMW makes a logging middleware at module level.
-func MakeFlakiModuleLoggingMW(logger log.Logger) func(FlakiHealthChecker) FlakiHealthChecker {
-	return func(next FlakiHealthChecker) FlakiHealthChecker {
-		return &flakiModuleLoggingMW{
-			logger: logger,
-			next:   next,
-		}
-	}
-}
-
-// FlakiHealthChecker is the interface of the flaki health check module.
-type FlakiHealthChecker interface {
-	HealthChecks(context.Context) []FlakiReport
-}
-
-// Logging middleware at module level.
-type flakiModuleLoggingMW struct {
-	logger log.Logger
-	next   FlakiHealthChecker
-}
-
-// flakiModuleLoggingMW implements FlakiHealthChecker. There must be a key "correlation_id" with a string value in the context.
-func (m *flakiModuleLoggingMW) HealthChecks(ctx context.Context) []FlakiReport {
-	defer func(begin time.Time) {
-		m.logger.Log("unit", "HealthChecks", "correlation_id", ctx.Value("correlation_id").(string), "took", time.Since(begin))
-	}(time.Now())
-
-	return m.next.HealthChecks(ctx)
 }

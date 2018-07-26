@@ -5,6 +5,7 @@
 package mock
 
 import (
+	context "context"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
@@ -32,15 +33,15 @@ func (m *FlakiClient) EXPECT() *FlakiClientMockRecorder {
 	return m.recorder
 }
 
-// NextValidID mocks base method
-func (m *FlakiClient) NextValidID() (string, error) {
-	ret := m.ctrl.Call(m, "NextValidID")
+// NextID mocks base method
+func (m *FlakiClient) NextID(arg0 context.Context) (string, error) {
+	ret := m.ctrl.Call(m, "NextID", arg0)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// NextValidID indicates an expected call of NextValidID
-func (mr *FlakiClientMockRecorder) NextValidID() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextValidID", reflect.TypeOf((*FlakiClient)(nil).NextValidID))
+// NextID indicates an expected call of NextID
+func (mr *FlakiClientMockRecorder) NextID(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextID", reflect.TypeOf((*FlakiClient)(nil).NextID), arg0)
 }

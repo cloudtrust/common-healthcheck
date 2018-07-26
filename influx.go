@@ -3,14 +3,14 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
 // NewInfluxModule returns the influx health module.
-func NewInfluxModule(influx Influx, enabled bool) *InfluxModule {
+func NewInfluxModule(influx InfluxClient, enabled bool) *InfluxModule {
 	return &InfluxModule{
 		influx:  influx,
 		enabled: enabled,
@@ -19,100 +19,59 @@ func NewInfluxModule(influx Influx, enabled bool) *InfluxModule {
 
 // InfluxModule is the health check module for influx.
 type InfluxModule struct {
-	influx  Influx
+	influx  InfluxClient
 	enabled bool
 }
 
-// Influx is the interface of the influx client.
-type Influx interface {
+// InfluxClient is the interface of the influx client.
+type InfluxClient interface {
 	Ping(timeout time.Duration) (time.Duration, string, error)
 }
 
-// InfluxReport is the health report returned by the influx module.
-type InfluxReport struct {
-	Name     string
-	Duration time.Duration
-	Status   Status
-	Error    error
+type influxReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-// MarshalJSON marshal the influx report.
-func (i *InfluxReport) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
-		Name     string `json:"name"`
-		Duration string `json:"duration"`
-		Status   string `json:"status"`
-		Error    string `json:"error"`
-	}{
-		Name:     i.Name,
-		Duration: i.Duration.String(),
-		Status:   i.Status.String(),
-		Error:    err(i.Error),
-	})
-}
-
-// HealthChecks executes all health checks for influx.
-func (m *InfluxModule) HealthChecks(context.Context) []InfluxReport {
+// HealthCheck executes the desired influx health check.
+func (m *InfluxModule) HealthCheck(_ context.Context, name string) (json.RawMessage, error) {
 	if !m.enabled {
-		return []InfluxReport{{Name: "influx", Status: Deactivated}}
+		return json.MarshalIndent([]influxReport{{Name: "influx", Status: Deactivated.String()}}, "", "  ")
 	}
 
-	var reports = []InfluxReport{}
-	reports = append(reports, m.influxPing())
-	return reports
+	var reports []influxReport
+	switch name {
+	case "":
+		reports = append(reports, m.influxPing())
+	case "ping":
+		reports = append(reports, m.influxPing())
+	default:
+		// Should not happen: there is a middleware validating the inputs name.
+		panic(fmt.Sprintf("Unknown influx health check name: %v", name))
+	}
+
+	return json.MarshalIndent(reports, "", "  ")
 }
 
-func (m *InfluxModule) influxPing() InfluxReport {
-	var healthCheckName = "ping"
+func (m *InfluxModule) influxPing() influxReport {
+	var name = "ping"
+	var status = OK
 
 	var now = time.Now()
 	var _, _, err = m.influx.Ping(5 * time.Second)
 	var duration = time.Since(now)
 
-	var hcErr error
-	var s Status
-	switch {
-	case err != nil:
-		hcErr = errors.Wrap(err, "could not ping influx")
-		s = KO
-	default:
-		s = OK
+	if err != nil {
+		status = KO
+		err = errors.Wrap(err, "could not ping influx")
 	}
 
-	return InfluxReport{
-		Name:     healthCheckName,
-		Duration: duration,
-		Status:   s,
-		Error:    hcErr,
+	return influxReport{
+		Name:     name,
+		Duration: duration.String(),
+		Status:   status.String(),
+		Error:    str(err),
 	}
-}
-
-// MakeInfluxModuleLoggingMW makes a logging middleware at module level.
-func MakeInfluxModuleLoggingMW(logger log.Logger) func(InfluxHealthChecker) InfluxHealthChecker {
-	return func(next InfluxHealthChecker) InfluxHealthChecker {
-		return &influxModuleLoggingMW{
-			logger: logger,
-			next:   next,
-		}
-	}
-}
-
-// InfluxHealthChecker is the interface of the influx health check module.
-type InfluxHealthChecker interface {
-	HealthChecks(context.Context) []InfluxReport
-}
-
-// Logging middleware at module level.
-type influxModuleLoggingMW struct {
-	logger log.Logger
-	next   InfluxHealthChecker
-}
-
-// influxModuleLoggingMW implements InfluxHealthChecker. There must be a key "correlation_id" with a string value in the context.
-func (m *influxModuleLoggingMW) HealthChecks(ctx context.Context) []InfluxReport {
-	defer func(begin time.Time) {
-		m.logger.Log("unit", "HealthChecks", "correlation_id", ctx.Value("correlation_id").(string), "took", time.Since(begin))
-	}(time.Now())
-
-	return m.next.HealthChecks(ctx)
 }
