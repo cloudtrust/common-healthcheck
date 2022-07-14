@@ -39,7 +39,7 @@ pipeline {
               nancy -no-color Gopkg.lock || true
 
               JAVA_TOOL_OPTIONS="" sonar-scanner \
-                -Dsonar.host.url=https://sonarqube-cloudtrust-cicd.apps.caas.west.ch.elca-cloud.com \
+                -Dsonar.host.url=https://sonarqube-cloudtrust-cicd.apps.okd-pp.west.ch.elca-cloud.com \
                 -Dsonar.login="${USER}" \
                 -Dsonar.password="${PASS}" \
                 -Dsonar.sourceEncoding=UTF-8 \
