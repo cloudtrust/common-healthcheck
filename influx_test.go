@@ -1,6 +1,6 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/influx.go -package=mock -mock_names=InfluxClient=InfluxClient  github.com/cloudtrust/common-healthcheck InfluxClient
+//go:generate mockgen --build_flags=--mod=mod -destination=./mock/influx.go -package=mock -mock_names=InfluxClient=InfluxClient  github.com/cloudtrust/common-healthcheck InfluxClient
 
 import (
 	"context"

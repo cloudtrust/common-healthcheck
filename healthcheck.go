@@ -7,7 +7,6 @@ import (
 )
 
 // Status is the status of the health check.
-//go:generate stringer -type=Status
 type Status int
 
 const (

@@ -1,6 +1,6 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/sentry.go -package=mock -mock_names=SentryClient=SentryClient github.com/cloudtrust/common-healthcheck SentryClient
+//go:generate mockgen --build_flags=--mod=mod -destination=./mock/sentry.go -package=mock -mock_names=SentryClient=SentryClient github.com/cloudtrust/common-healthcheck SentryClient
 
 import (
 	"context"
