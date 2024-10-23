@@ -10,8 +10,8 @@ import (
 
 	. "github.com/cloudtrust/common-healthcheck"
 	"github.com/cloudtrust/common-healthcheck/mock"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 //go:generate mockgen --build_flags=--mod=mod -destination=./mock/logging.go -package=mock -mock_names=Logger=Logger github.com/go-kit/kit/log Logger

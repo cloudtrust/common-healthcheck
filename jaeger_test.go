@@ -10,8 +10,8 @@ import (
 	"time"
 
 	. "github.com/cloudtrust/common-healthcheck"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 func init() {
