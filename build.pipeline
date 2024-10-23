@@ -1,0 +1,1 @@
+goLibBuildPipeline('common-healthcheck', true, 'ssh://git@github.com/cloudtrust/common-healthcheck')

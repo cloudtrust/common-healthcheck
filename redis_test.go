@@ -1,6 +1,6 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/redis.go -package=mock -mock_names=RedisClient=RedisClient github.com/cloudtrust/common-healthcheck RedisClient
+//go:generate mockgen --build_flags=--mod=mod -destination=./mock/redis.go -package=mock -mock_names=RedisClient=RedisClient github.com/cloudtrust/common-healthcheck RedisClient
 
 import (
 	"context"

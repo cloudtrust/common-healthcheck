@@ -1,6 +1,6 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/cockroach.go -package=mock -mock_names=CockroachClient=CockroachClient  github.com/cloudtrust/common-healthcheck CockroachClient
+//go:generate mockgen --build_flags=--mod=mod -destination=./mock/cockroach.go -package=mock -mock_names=CockroachClient=CockroachClient  github.com/cloudtrust/common-healthcheck CockroachClient
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	. "github.com/cloudtrust/common-healthcheck"
 	mock "github.com/cloudtrust/common-healthcheck/mock"
 	"github.com/golang/mock/gomock"
+	_ "github.com/golang/mock/mockgen/model"
 	"github.com/stretchr/testify/assert"
 )
 

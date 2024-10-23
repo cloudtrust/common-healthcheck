@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//go:generate mockgen --build_flags=--mod=mod -destination=./mock/healthcheck.go -package=mock -mock_names=HealthChecker=HealthChecker github.com/cloudtrust/common-healthcheck HealthChecker
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }

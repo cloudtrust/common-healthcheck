@@ -1,6 +1,6 @@
 package common_test
 
-//go:generate mockgen -destination=./mock/flaki.go -package=mock -mock_names=FlakiClient=FlakiClient  github.com/cloudtrust/common-healthcheck FlakiClient
+//go:generate mockgen --build_flags=--mod=mod -destination=./mock/flaki.go -package=mock -mock_names=FlakiClient=FlakiClient  github.com/cloudtrust/common-healthcheck FlakiClient
 
 import (
 	"context"
