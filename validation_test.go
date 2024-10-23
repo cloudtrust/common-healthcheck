@@ -9,8 +9,8 @@ import (
 
 	. "github.com/cloudtrust/common-healthcheck"
 	"github.com/cloudtrust/common-healthcheck/mock"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 func init() {
