@@ -1,13 +1,15 @@
 module github.com/cloudtrust/common-healthcheck
 
-go 1.22.0
+go 1.23
+
+toolchain go1.24.2
 
 require (
 	github.com/go-kit/kit v0.13.0
 	github.com/golang/mock v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
-	go.uber.org/mock v0.5.1
+	go.uber.org/mock v0.5.2
 )
 
 require (
