@@ -2,7 +2,7 @@ module github.com/cloudtrust/common-healthcheck
 
 go 1.23
 
-toolchain go1.24.2
+toolchain go1.24.3
 
 require (
 	github.com/go-kit/kit v0.13.0
