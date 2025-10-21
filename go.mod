@@ -1,6 +1,6 @@
 module github.com/cloudtrust/common-healthcheck
 
-go 1.24.1
+go 1.25.3
 
 require (
 	github.com/go-kit/kit v0.13.0
