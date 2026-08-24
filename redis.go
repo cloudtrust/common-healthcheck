@@ -25,7 +25,7 @@ type RedisModule struct {
 
 // RedisClient is the interface of the redis client.
 type RedisClient interface {
-	Do(cmd string, args ...interface{}) (interface{}, error)
+	Do(cmd string, args ...any) (any, error)
 }
 
 type redisReport struct {

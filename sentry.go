@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
+
 	"net/http"
 	"strings"
 	"time"
@@ -113,7 +114,7 @@ func (m *SentryModule) getSentryHealth() error {
 	var response []byte
 	{
 		var err error
-		response, err = ioutil.ReadAll(res.Body)
+		response, err = io.ReadAll(res.Body)
 		if err != nil {
 			return err
 		}
