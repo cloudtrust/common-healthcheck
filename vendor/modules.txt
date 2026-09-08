@@ -4,8 +4,8 @@ github.com/go-kit/kit/log
 # github.com/go-kit/log v0.2.1
 ## explicit; go 1.17
 github.com/go-kit/log
-# github.com/go-logfmt/logfmt v0.6.0
-## explicit; go 1.17
+# github.com/go-logfmt/logfmt v0.6.1
+## explicit; go 1.21
 github.com/go-logfmt/logfmt
 # github.com/golang/mock v1.6.0
 ## explicit; go 1.11
